@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="Twinhull">
+  <rect width="64" height="64" rx="14" fill="#0b2a3f"/>
+  <path d="M12 38c6 8 14 8 20 0" fill="none" stroke="#5fd4c4" stroke-width="5" stroke-linecap="round"/>
+  <path d="M32 38c6 8 14 8 20 0" fill="none" stroke="#5fd4c4" stroke-width="5" stroke-linecap="round"/>
+  <path d="M14 30h36" stroke="#e8f1f5" stroke-width="4" stroke-linecap="round"/>
+  <path d="M32 30V14l10 10H32" fill="#e8f1f5"/>
+</svg>
