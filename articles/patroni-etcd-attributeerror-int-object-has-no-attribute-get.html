@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Patroni “Failed to get list of machines… &#x27;int&#x27; object has no attribute &#x27;get&#x27;” with etcd on Ubuntu 24.04 · Twinhull</title>
+<meta name="description" content="Patroni loops on &#x27;Failed to get list of machines from http://…/v3: AttributeError&#x27; and &#x27;waiting on etcd&#x27;. The cause is the etcd 3.4 package in Ubuntu 24.04; here is how to confirm it and install a working etcd 3.6.">
+<link rel="canonical" href="https://twinhullhq.com/articles/patroni-etcd-attributeerror-int-object-has-no-attribute-get.html">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Patroni “Failed to get list of machines… &#x27;int&#x27; object has no attribute &#x27;get&#x27;” with etcd on Ubuntu 24.04">
+<meta property="og:description" content="Patroni loops on &#x27;Failed to get list of machines from http://…/v3: AttributeError&#x27; and &#x27;waiting on etcd&#x27;. The cause is the etcd 3.4 package in Ubuntu 24.04; here is how to confirm it and install a working etcd 3.6.">
+<meta property="og:url" content="https://twinhullhq.com/articles/patroni-etcd-attributeerror-int-object-has-no-attribute-get.html">
+<meta property="og:site_name" content="Twinhull">
+<meta name="twitter:card" content="summary">
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../assets/style.css">
+
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "TechArticle", "headline": "Patroni “Failed to get list of machines… 'int' object has no attribute 'get'” with etcd on Ubuntu 24.04", "description": "Patroni loops on 'Failed to get list of machines from http://…/v3: AttributeError' and 'waiting on etcd'. The cause is the etcd 3.4 package in Ubuntu 24.04; here is how to confirm it and install a working etcd 3.6.", "datePublished": "2026-09-27", "dateModified": "2026-09-27", "author": {"@type": "Organization", "name": "Twinhull", "url": "https://twinhullhq.com"}, "publisher": {"@type": "Organization", "name": "Twinhull", "url": "https://twinhullhq.com"}, "mainEntityOfPage": "https://twinhullhq.com/articles/patroni-etcd-attributeerror-int-object-has-no-attribute-get.html"}</script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="../index.html"><img src="../assets/logo.svg" alt="" width="30" height="30">Twinhull</a>
+    <nav class="nav" aria-label="Main">
+<a href="../index.html">Kit</a>
+<a href="../sample.html">Free chapter</a>
+<a href="../articles/" aria-current="page">Articles</a>
+<a href="../index.html#pricing">Pricing</a>
+    </nav>
+  </div>
+</header>
+<main id="main">
+<article class="article">
+  <div class="narrow">
+    <p class="crumbs"><a href="../articles/">Articles</a> › Installation</p>
+    <h1>Patroni “'int' object has no attribute 'get'” with etcd on Ubuntu 24.04</h1>
+    <p class="meta">Published 27 September 2026 · 5 min read · Patroni 4.1.5, etcd 3.4.30 → 3.6.15</p>
+
+    <p class="lead">You installed etcd with <code>apt</code>, started a healthy 3-member cluster, and pointed Patroni at it. Patroni never starts PostgreSQL. It just logs the same error every five seconds. The problem is the etcd version, not your configuration.</p>
+
+    <h2>The symptom</h2>
+<pre><span class="e">ERROR: Failed to get list of machines from http://127.0.0.1:2379/v3: AttributeError("'int' object has no attribute 'get'")</span>
+<span class="e">ERROR: Failed to get list of machines from http://127.0.0.1:2380/v3: AttributeError("'int' object has no attribute 'get'")</span>
+INFO: waiting on etcd</pre>
+    <p>Meanwhile etcd itself looks perfectly healthy, which is what makes this confusing:</p>
+<pre>$ etcdctl endpoint health
+127.0.0.1:2379 is healthy: successfully committed proposal: took = 2.1ms</pre>
+
+    <h2>The cause</h2>
+    <p>Patroni's <code>etcd3</code> backend doesn't use gRPC. It talks to etcd's <strong>JSON gateway</strong> over plain HTTP, the <code>/v3/…</code> endpoints. Ubuntu 24.04's <code>etcd-server</code> package is etcd <strong>3.4.30</strong>. On that build, the endpoint Patroni calls first to discover cluster members doesn't answer the way Patroni expects:</p>
+<pre>$ curl -s http://127.0.0.1:2379/version
+{"etcdserver":"3.4.30","etcdcluster":"3.4.0"}
+
+$ curl -s -X POST http://127.0.0.1:2379/v3/cluster/member/list -d '{}'
+<span class="e">404 page not found</span></pre>
+    <p>Patroni gets back something that isn't the JSON object it expects, fails while parsing it, and retries forever. The error names a Python type, not etcd, which sends people looking in the wrong place.</p>
+    <p>The same request against etcd 3.6 returns the member list, and Patroni bootstraps immediately. We confirmed both on the same machine while testing the Twinhull kit.</p>
+
+    <h2>Confirm it on your system</h2>
+<pre>etcd --version | head -1                 <span class="c"># 3.4.x → this is your problem</span>
+curl -s -X POST http://&lt;etcd-ip&gt;:2379/v3/cluster/member/list -d '{}' | head -c 200</pre>
+    <p>If the second command prints <code>404 page not found</code> instead of JSON with a <code>members</code> array, upgrade etcd.</p>
+
+    <h2>The fix: install etcd 3.5 or newer from the official release</h2>
+    <p>Distribution packages lag behind. Install the upstream release binaries, which are statically linked and have no dependencies (current as of September 2026: 3.6.15; check <a href="https://github.com/etcd-io/etcd/releases">github.com/etcd-io/etcd/releases</a>):</p>
+<pre>sudo systemctl disable --now etcd                    <span class="c"># stop the distro etcd</span>
+sudo apt remove -y etcd-server etcd-client
+
+ETCD_VER=v3.6.15
+curl -fsSL -o /tmp/etcd.tgz \
+  https://github.com/etcd-io/etcd/releases/download/$ETCD_VER/etcd-$ETCD_VER-linux-amd64.tar.gz
+tar xzf /tmp/etcd.tgz -C /tmp
+sudo install -m 755 /tmp/etcd-$ETCD_VER-linux-amd64/{etcd,etcdctl,etcdutl} /usr/local/bin/
+etcd --version | head -1                             <span class="ok"># etcd Version: 3.6.15</span></pre>
+    <p>Then run etcd from <code>/usr/local/bin/etcd</code> with your own systemd unit and a config file (<code>--config-file /etc/etcd/etcd.conf.yml</code>).</p>
+
+    <div class="note warn"><strong>Upgrading an existing 3.4 cluster?</strong> etcd supports upgrading one minor version at a time: 3.4 → 3.5 → 3.6, member by member. For a new Patroni cluster that has never stored anything, it's simpler to stop all members, wipe their data directories, and start fresh on 3.6.</div>
+
+    <h2>Two more things while you're here</h2>
+    <ul>
+      <li><strong>Don't switch Patroni to the old <code>etcd</code> (v2) backend</strong> to work around this. The v2 API is deprecated, and etcd 3.6 no longer serves it.</li>
+      <li><strong>Use <code>etcdctl</code> without a proxy.</strong> If your servers export <code>HTTPS_PROXY</code>, add the etcd addresses to <code>NO_PROXY</code>, or health checks may go through the proxy and time out.</li>
+    </ul>
+
+    <div class="cta-box">
+      <h3>Caught automatically in the Twinhull HA Kit</h3>
+      <p>The kit's <code>preflight</code> check fails on etcd versions older than 3.5 before you install anything, and the guide installs the official 3.6 release with a hardened systemd unit and optional mutual TLS.</p>
+      <a class="btn btn-primary" href="../index.html">See the kit</a>
+    </div>
+  </div>
+</article>
+
+</main>
+<footer class="site-footer">
+  <div class="wrap">
+    <div>© 2026 Twinhull · Tested high availability for PostgreSQL<br>
+    <span class="small">PostgreSQL is a registered trademark of the PostgreSQL Community Association. Twinhull is not affiliated with or endorsed by it.</span></div>
+    <nav aria-label="Legal">
+      <a href="../legal/terms.html">Terms</a>
+      <a href="../legal/privacy.html">Privacy</a>
+      <a href="../legal/refund.html">Refunds</a>
+      <a href="mailto:support@twinhullhq.com">support@twinhullhq.com</a>
+    </nav>
+  </div>
+</footer>
+</body>
+</html>

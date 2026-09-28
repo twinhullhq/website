@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>How long does a Patroni failover take? We measured it · Twinhull</title>
+<meta name="description" content="Measured Patroni failover times for planned switchover, clean stop and hard crash, with ttl, loop_wait and retry_timeout explained, what tuning buys you, and how to measure your own cluster.">
+<link rel="canonical" href="https://twinhullhq.com/articles/how-long-does-patroni-failover-take.html">
+<meta property="og:type" content="article">
+<meta property="og:title" content="How long does a Patroni failover take? We measured it">
+<meta property="og:description" content="Measured Patroni failover times for planned switchover, clean stop and hard crash, with ttl, loop_wait and retry_timeout explained, what tuning buys you, and how to measure your own cluster.">
+<meta property="og:url" content="https://twinhullhq.com/articles/how-long-does-patroni-failover-take.html">
+<meta property="og:site_name" content="Twinhull">
+<meta name="twitter:card" content="summary">
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../assets/style.css">
+
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "TechArticle", "headline": "How long does a Patroni failover take? We measured it", "description": "Measured Patroni failover times for planned switchover, clean stop and hard crash, with ttl, loop_wait and retry_timeout explained, what tuning buys you, and how to measure your own cluster.", "datePublished": "2026-09-27", "dateModified": "2026-09-27", "author": {"@type": "Organization", "name": "Twinhull", "url": "https://twinhullhq.com"}, "publisher": {"@type": "Organization", "name": "Twinhull", "url": "https://twinhullhq.com"}, "mainEntityOfPage": "https://twinhullhq.com/articles/how-long-does-patroni-failover-take.html"}</script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="../index.html"><img src="../assets/logo.svg" alt="" width="30" height="30">Twinhull</a>
+    <nav class="nav" aria-label="Main">
+<a href="../index.html">Kit</a>
+<a href="../sample.html">Free chapter</a>
+<a href="../articles/" aria-current="page">Articles</a>
+<a href="../index.html#pricing">Pricing</a>
+    </nav>
+  </div>
+</header>
+<main id="main">
+<article class="article">
+  <div class="narrow">
+    <p class="crumbs"><a href="../articles/">Articles</a> › Performance</p>
+    <h1>How long does a Patroni failover take? We measured it</h1>
+    <p class="meta">Published 27 September 2026 · 8 min read · Patroni 4.1.5, etcd 3.6.15, HAProxy 2.8, PostgreSQL 16</p>
+
+    <p class="lead">“A few seconds” is the usual answer. It's true for one kind of failover and wrong for the one that matters most. Here are real numbers from a 3-node cluster, what drives them, and what tuning actually buys you.</p>
+
+    <h2>The short answer</h2>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>What happened to the leader</th><th>Writes unavailable</th><th>Why</th></tr></thead>
+        <tbody>
+          <tr><td>Planned switchover (<code>patronictl switchover</code>)</td><td class="num">4.7–5.0 s</td><td>Leader steps down cleanly and hands over the lock</td></tr>
+          <tr><td>Clean stop (<code>systemctl stop patroni</code>, reboot)</td><td class="num">4.7–7.0 s</td><td>Patroni releases the lock as it shuts down</td></tr>
+          <tr><td>Hard crash (power loss, kernel panic, <code>kill -9</code>)</td><td class="num">24–30 s</td><td>Nobody releases the lock; it has to expire</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="small muted">Default timings (ttl 30 s, loop_wait 10 s, retry_timeout 10 s). Asynchronous replication, HAProxy routing on the Patroni REST API. Ranges cover repeated runs. Zero committed transactions were lost in every run.</p>
+
+    <h2>How we measured</h2>
+    <p>A writer opened a new connection through HAProxy's read-write port and committed one row every 200 ms, the way an application with a retrying connection pool behaves. We then took the leader away and recorded:</p>
+    <ul>
+      <li><strong>Write downtime:</strong> from the first failed write to the first successful write on the new leader. This is what your users feel.</li>
+      <li><strong>Lost transactions:</strong> every row the client saw as committed, checked against the database afterwards.</li>
+      <li><strong>Rejoin time:</strong> until the old leader streamed again as a replica, which shows that <code>pg_rewind</code> worked.</li>
+    </ul>
+    <p>We measured the write path end to end, not just Patroni's log, because what matters is when writes succeed again. That includes Patroni's election, PostgreSQL's promotion, and HAProxy noticing the new leader.</p>
+
+    <h2>Why a crash takes ~30 seconds</h2>
+    <p>Patroni's leader holds a lock (a key with a time-to-live) in etcd and renews it every <code>loop_wait</code> seconds. When the leader is stopped or switched over, Patroni deletes the key, so a replica can take over on its next loop.</p>
+    <p>When the leader <em>crashes</em>, nothing deletes the key. The replicas must assume the leader might still be alive, perhaps just slow, until the lock expires after <code>ttl</code> seconds. That waiting is deliberate: it's what stops two nodes believing they're both the primary. So crash failover time is roughly:</p>
+<pre>ttl  (time since the last renewal, up to 30 s)
++ promotion of the best replica      (~1 s)
++ HAProxy health check notices it    (1–3 s)</pre>
+    <p>With the default <code>ttl: 30</code>, we measured 24 to 30 seconds. The spread comes from when in the renewal cycle the crash happens.</p>
+
+    <h2>What tuning buys you</h2>
+    <p>The three settings live in Patroni's cluster configuration (<code>patronictl edit-config</code>) and must satisfy <code>ttl ≥ loop_wait + 2 × retry_timeout</code>:</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>ttl / loop_wait / retry_timeout</th><th>Crash downtime measured</th></tr></thead>
+        <tbody>
+          <tr><td class="num">30 / 10 / 10 (default)</td><td class="num">24–30 s</td></tr>
+          <tr><td class="num">20 / 5 / 5</td><td class="num">19.9–20.8 s</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p>Cutting the timings by a third saved us about 5–8 seconds. It comes at a cost: <code>retry_timeout</code> is also how long Patroni tolerates a slow etcd or a network blip before it gives up. Set it too low, and a 6-second hiccup on a busy network demotes a healthy primary. You'd trade a rare 30-second outage for more frequent, unnecessary 5-second ones. For most clusters on a normal LAN, the defaults are right.</p>
+    <p>Two settings that matter more than people expect:</p>
+    <ul>
+      <li><strong><code>failsafe_mode: true</code>.</strong> Without it, losing etcd quorum demotes the primary even though PostgreSQL is fine. In our test, with 2 of 3 etcd members down and failsafe mode on, the primary kept accepting writes for the whole test. Only automatic failover was lost.</li>
+      <li><strong>HAProxy's check interval.</strong> <code>inter 2s fastinter 500ms fall 2 rise 1</code> detects the change within a couple of seconds. The common tutorial value <code>inter 3s fall 3 rise 2</code> can add 6–9 seconds on its own.</li>
+    </ul>
+
+    <h2>Does synchronous replication slow failover down?</h2>
+    <p>Not measurably. With <code>synchronous_mode: true</code> a crash took 23.2 seconds, within the async range. What synchronous mode changes is what you can <em>lose</em>: it guarantees zero lost committed transactions, at the cost of one network round trip on every commit. Async lost nothing in our runs too, but it can't promise that.</p>
+
+    <h2>Why a switchover still takes ~5 seconds</h2>
+    <p>Even a planned switchover interrupts writes: the old leader must stop accepting writes, flush its last WAL to the candidate, and restart as a replica, while the candidate is promoted. Existing connections are cut. Your application needs to reconnect. That's why a connection pool with automatic reconnect matters as much as anything in the database layer.</p>
+
+    <h2>Measure your own cluster</h2>
+    <p>Your network, disks and HAProxy placement will produce different numbers. Measure before you promise an RTO to anyone:</p>
+    <ol>
+      <li>Build a staging cluster that matches production.</li>
+      <li>Run a writer through the same connection path your applications use.</li>
+      <li>Test all three: switchover, clean stop, and a real crash (<code>SIGKILL</code> to Patroni <em>and</em> PostgreSQL).</li>
+      <li>Check lost rows, not just downtime. Confirm the old leader rejoins by itself.</li>
+      <li>Repeat each test several times and report the range, not the best run.</li>
+    </ol>
+
+    <div class="cta-box">
+      <h3>The Twinhull kit automates all of this</h3>
+      <p><code>failover-drill</code> runs the writer, performs the switchover, stop or crash, verifies every committed row and writes a dated Markdown report. The same tests produced every number on this page.</p>
+      <a class="btn btn-primary" href="../index.html">See the kit</a>
+    </div>
+  </div>
+</article>
+
+</main>
+<footer class="site-footer">
+  <div class="wrap">
+    <div>© 2026 Twinhull · Tested high availability for PostgreSQL<br>
+    <span class="small">PostgreSQL is a registered trademark of the PostgreSQL Community Association. Twinhull is not affiliated with or endorsed by it.</span></div>
+    <nav aria-label="Legal">
+      <a href="../legal/terms.html">Terms</a>
+      <a href="../legal/privacy.html">Privacy</a>
+      <a href="../legal/refund.html">Refunds</a>
+      <a href="mailto:support@twinhullhq.com">support@twinhullhq.com</a>
+    </nav>
+  </div>
+</footer>
+</body>
+</html>
