@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Free chapter: Patroni troubleshooting, real failures and fixes · Twinhull</title>
+<meta name="description" content="A free excerpt from the Twinhull HA Kit guide: five production failures in Patroni clusters, seen in testing, with symptoms, causes and exact fixes.">
+<link rel="canonical" href="https://twinhullhq.com/sample.html">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Free chapter: Patroni troubleshooting, real failures and fixes">
+<meta property="og:description" content="A free excerpt from the Twinhull HA Kit guide: five production failures in Patroni clusters, seen in testing, with symptoms, causes and exact fixes.">
+<meta property="og:url" content="https://twinhullhq.com/sample.html">
+<meta property="og:site_name" content="Twinhull">
+<meta name="twitter:card" content="summary">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="assets/style.css">
+
+
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="index.html"><img src="assets/logo.svg" alt="" width="30" height="30">Twinhull</a>
+    <nav class="nav" aria-label="Main">
+<a href="index.html">Kit</a>
+<a href="sample.html" aria-current="page">Free chapter</a>
+<a href="articles/">Articles</a>
+<a href="index.html#pricing">Pricing</a>
+    </nav>
+  </div>
+</header>
+<main id="main">
+<article class="article">
+  <div class="narrow">
+    <span class="eyebrow">Free chapter · Excerpt from chapter 10 of 10</span>
+    <h1>Troubleshooting: real failures and their fixes</h1>
+    <p class="lead">This is the unedited opening of the kit's troubleshooting chapter. Each entry happened on our own test cluster while we built the kit. The full chapter has 14 entries and a support-bundle script; the full guide has 10 chapters.</p>
+<p>Each entry: the symptom as you'll see it, the cause, the fix. Entries marked <strong>(seen in testing)</strong> happened on the kit's own lab while building it.</p>
+<h2 id="old-leader-stays-in-start-failed-pg_rewind-password-authentication-failed-for-user-rewind_user-seen-in-testing">Old leader stays in <code>start failed</code>; <code>pg_rewind: password authentication failed for user "rewind_user"</code> (seen in testing)</h2>
+<p><strong>Cause:</strong> Patroni was started from a shell or a unit with <code>PGPASSWORD</code> in its environment. libpq uses <code>PGPASSWORD</code> before the <code>.pgpass</code> file Patroni writes, so <code>pg_rewind</code> sends the wrong password, fails, and the old leader can't rejoin. Replication from that process uses the same <code>.pgpass</code> (<code>primary_conninfo</code> has <code>passfile=</code>), so it can't stream either. Nodes started cleanly are unaffected, which is why it hides: it bites the node restarted by hand after an incident.</p>
+<p><strong>Fix:</strong> never start Patroni from an interactive shell; use the systemd unit, which has a clean environment. Check a running Patroni: <code>tr '\0' '\n' &lt; /proc/$(pgrep -f bin/patroni | head -1)/environ | grep ^PG</code>. Then restart Patroni on the failed node. <code>bin/preflight</code> warns about exported PG* variables.</p>
+<h2 id="patroni-ignores-a-setting-in-patroniyml-eg-logs-to-the-wrong-directory-seen-in-testing">Patroni ignores a setting in patroni.yml, e.g. logs to the wrong directory (seen in testing)</h2>
+<p><strong>Cause:</strong> every environment variable named <code>PATRONI_*</code> is read as configuration and overrides the YAML (<code>PATRONI_LOG_DIR</code>, <code>PATRONI_NAME</code>, <code>PATRONI_RESTAPI_LISTEN</code>…). A deployment script that exports variables with that prefix leaks them into Patroni.</p>
+<p><strong>Fix:</strong> remove them from the service environment. The kit's own variables use the <code>HA_</code> prefix for this reason; <code>render-configs</code> refuses <code>PATRONI_*</code> names in <code>cluster.env</code>.</p>
+<h2 id="patroni-loops-on-failed-to-get-list-of-machines--attributeerrorint-object-has-no-attribute-get-seen-in-testing">Patroni loops on <code>Failed to get list of machines … AttributeError("'int' object has no attribute 'get'")</code> (seen in testing)</h2>
+<p><strong>Cause:</strong> etcd 3.4 (e.g. Ubuntu 24.04's package). Its gRPC gateway doesn't serve the v3 JSON endpoints Patroni's <code>etcd3</code> client calls.</p>
+<p><strong>Fix:</strong> etcd 3.5+ from the official release (chapter 2). <code>bin/preflight</code> fails on etcd &lt; 3.5.</p>
+<h2 id="archive-command-failed-repeatedly-right-after-the-cluster-is-created-seen-in-testing"><code>archive command failed</code> repeatedly right after the cluster is created (seen in testing)</h2>
+<p><strong>Cause:</strong> archiving starts at bootstrap; the pgBackRest stanza doesn't exist yet. Harmless for a few minutes, but WAL piles up in <code>pg_wal</code> until it's fixed.</p>
+<p><strong>Fix:</strong> <code>pgbackrest --stanza=&lt;cluster&gt; stanza-create</code> on the leader right after bootstrap (chapter 3, step 7). <code>ha-check</code> reports archiving as CRITICAL until then.</p>
+<h2 id="replica-could-not-start-wal-streaming-replication-slot-pg2-does-not-exist-seen-in-testing">Replica: <code>could not start WAL streaming: replication slot "pg2" does not exist</code> (seen in testing)</h2>
+<p><strong>Cause:</strong> normal during the first seconds of a new replica or after a failover: Patroni creates the slot on the leader on its next loop.</p>
+<p><strong>Fix:</strong> none if it clears within <code>loop_wait</code> × 2. If it persists: <code>patronictl list</code> for a paused cluster, and the leader's Patroni log for slot errors.</p>
+
+    <div class="cta-box">
+      <h3>That was 5 of 14 entries in one of 10 chapters</h3>
+      <p>The full kit adds the architecture decisions, a step-by-step install, a tested restore procedure, a DR runbook, and the tools that found these bugs: <code>preflight</code>, <code>ha-check</code>, <code>failover-drill</code> and a 3-node lab.</p>
+      <a class="btn btn-primary" href="index.html#pricing">Get the kit — $89</a>
+    </div>
+  </div>
+</article>
+
+</main>
+<footer class="site-footer">
+  <div class="wrap">
+    <div>© 2026 Twinhull · Tested high availability for PostgreSQL<br>
+    <span class="small">PostgreSQL is a registered trademark of the PostgreSQL Community Association. Twinhull is not affiliated with or endorsed by it.</span></div>
+    <nav aria-label="Legal">
+      <a href="legal/terms.html">Terms</a>
+      <a href="legal/privacy.html">Privacy</a>
+      <a href="legal/refund.html">Refunds</a>
+      <a href="mailto:support@twinhullhq.com">support@twinhullhq.com</a>
+    </nav>
+  </div>
+</footer>
+</body>
+</html>

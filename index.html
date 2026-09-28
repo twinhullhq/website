@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Twinhull — Tested high availability for PostgreSQL</title>
+<meta name="description" content="A production Patroni + etcd + HAProxy + pgBackRest kit for PostgreSQL, tested on a real cluster: health checks, failover drills that measure downtime and data loss, runbooks and a 3-node lab.">
+<link rel="canonical" href="https://twinhullhq.com/">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Twinhull — Tested high availability for PostgreSQL">
+<meta property="og:description" content="A production Patroni + etcd + HAProxy + pgBackRest kit for PostgreSQL, tested on a real cluster: health checks, failover drills that measure downtime and data loss, runbooks and a 3-node lab.">
+<meta property="og:url" content="https://twinhullhq.com/">
+<meta property="og:site_name" content="Twinhull">
+<meta name="twitter:card" content="summary">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="assets/style.css">
+
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "Product", "name": "Twinhull HA Kit for PostgreSQL", "description": "A production Patroni + etcd + HAProxy + pgBackRest kit for PostgreSQL, tested on a real cluster: health checks, failover drills that measure downtime and data loss, runbooks and a 3-node lab.", "brand": {"@type": "Brand", "name": "Twinhull"}, "offers": [{"@type": "Offer", "name": "Solo", "price": "89.00", "priceCurrency": "USD", "url": "https://twinhullhq.com/#pricing"}, {"@type": "Offer", "name": "Team", "price": "349.00", "priceCurrency": "USD", "url": "https://twinhullhq.com/#pricing"}]}</script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="index.html"><img src="assets/logo.svg" alt="" width="30" height="30">Twinhull</a>
+    <nav class="nav" aria-label="Main">
+<a href="index.html" aria-current="page">Kit</a>
+<a href="sample.html">Free chapter</a>
+<a href="articles/">Articles</a>
+<a href="index.html#pricing">Pricing</a>
+    </nav>
+  </div>
+</header>
+<main id="main">
+<section class="hero">
+  <div class="wrap">
+    <span class="eyebrow">Twinhull HA Kit for PostgreSQL · v1.0</span>
+    <h1>PostgreSQL high availability<br>you can prove works.</h1>
+    <p class="lead">Tutorials get you a cluster that starts. This kit gets you one that survives: tested Patroni configs, a failover drill that measures your real downtime and data loss, health checks, backups, runbooks, and a lab to rehearse it all.</p>
+    <div class="cta">
+      <a class="btn btn-primary" href="#pricing">Get the kit — $89</a>
+      <a class="btn btn-ghost" href="sample.html">Read a free chapter</a>
+    </div>
+    <p class="hero-meta">Patroni 4.1 · etcd 3.6 · HAProxy · keepalived · pgBackRest · PostgreSQL 14–18 · Linux VMs or bare metal</p>
+  </div>
+</section>
+
+<section class="alt" aria-labelledby="drill-h">
+  <div class="wrap grid g2" style="align-items:center">
+    <div>
+      <span class="eyebrow">The part nobody else ships</span>
+      <h2 id="drill-h">Pull the plug on your leader. Get a report.</h2>
+      <p><code>failover-drill</code> writes to your cluster every 200&nbsp;ms, takes the leader away (planned switchover, clean stop, or a hard crash), then checks every committed row and times every second of downtime.</p>
+      <p>You get a report you can hand to your manager or your auditor: how long writes stopped, how many transactions were lost, and whether the old leader rejoined by itself.</p>
+    </div>
+<pre class="terminal" aria-label="Example output of failover-drill"><span class="c">$ sudo bin/failover-drill --mode crash</span>
+▸ preflight: ha-check            <span class="ok">Overall: OK</span>
+▸ leader is pg1 (timeline 1); mode: crash
+▸ writer running (12 commits so far)
+▸ CRASHING pg1 (SIGKILL Patroni + PostgreSQL)
+▸ waiting for a new leader...
+▸ new leader: pg3
+▸ restarting pg1 — it must rejoin as a replica
+
+| Write downtime              | <span class="ok">24.2 s</span> |
+| Committed transactions lost | <span class="ok">0</span>      |
+| Old leader back as replica  | <span class="ok">33.8 s</span> |
+
+Verdict: <span class="ok">PASS</span>   Report: reports/drill-…-crash.md</pre>
+  </div>
+</section>
+
+<section aria-labelledby="why-h">
+  <div class="wrap">
+    <span class="eyebrow">Why this exists</span>
+    <h2 id="why-h">The first real failover shouldn't be the test.</h2>
+    <div class="grid g3" style="margin-top:28px">
+      <div class="card"><h3>Blog configs aren't tested</h3><p>Most Patroni guides stop once <code>patronictl list</code> shows three green members. Nobody kills the leader, restores a backup, or checks that the old primary comes back.</p></div>
+      <div class="card"><h3>The bugs hide until 3&nbsp;a.m.</h3><p>A stray environment variable can silently break <code>pg_rewind</code>. Everything looks healthy for months, until the first unplanned failover leaves you one replica short.</p></div>
+      <div class="card"><h3>Auditors want evidence</h3><p>Banks, payment and healthcare teams have to show that failover and restore are tested. "It worked in the tutorial" is not evidence. A dated drill report is.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="alt" aria-labelledby="results-h">
+  <div class="wrap">
+    <span class="eyebrow">Measured, not promised</span>
+    <h2 id="results-h">Every release is tested on a real 3-node cluster</h2>
+    <p class="muted">v1.0 test run: PostgreSQL 16, Patroni 4.1.5, etcd 3.6.15, HAProxy 2.8, default timings (ttl 30&nbsp;s). Ranges cover repeated runs.</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th scope="col">Scenario</th><th scope="col">Write downtime</th><th scope="col">Committed transactions lost</th><th scope="col">Old leader rejoins</th></tr></thead>
+        <tbody>
+          <tr><td>Planned switchover</td><td class="num">4.7–5.0 s</td><td class="num good">0</td><td class="num">~10 s</td></tr>
+          <tr><td>Clean stop of the leader</td><td class="num">4.7–7.0 s</td><td class="num good">0</td><td class="num">~14 s</td></tr>
+          <tr><td>Hard crash of the leader (kill -9), async</td><td class="num">24–30 s</td><td class="num good">0</td><td class="num">~34 s</td></tr>
+          <tr><td>Hard crash, synchronous replication</td><td class="num">23.2 s</td><td class="num good">0</td><td class="num">31 s</td></tr>
+          <tr><td>Hard crash, etcd with mutual TLS</td><td class="num">26.4 s</td><td class="num good">0</td><td class="num">34 s</td></tr>
+          <tr><td>2 of 3 etcd members down</td><td class="num">0 s — primary kept writing</td><td class="num good">0</td><td class="num">—</td></tr>
+          <tr><td>Point-in-time restore after <code>DROP TABLE</code></td><td class="num">planned outage</td><td class="num good">0 rows before the target</td><td class="num">replicas rebuilt</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p class="small muted" style="margin-top:12px">A crash takes about <code>ttl</code> seconds because a dead leader can't release its lock. The guide explains how to tune it, and what faster settings cost you. Your numbers depend on your network: the drill measures yours.</p>
+  </div>
+</section>
+
+<section aria-labelledby="inside-h">
+  <div class="wrap">
+    <span class="eyebrow">What's inside</span>
+    <h2 id="inside-h">Tools, templates, a lab and a 10-chapter guide</h2>
+    <div class="grid g3" style="margin-top:28px">
+      <div class="card"><span class="tag">render-configs</span><h3>One file, every config</h3><p>Describe the cluster once in <code>cluster.env</code>. Every Patroni, etcd, HAProxy, keepalived and pgBackRest file for every node is generated and validated. It refuses weak secrets, unsafe timings and two-node clusters.</p></div>
+      <div class="card"><span class="tag">preflight</span><h3>Servers checked before install</h3><p>Clock sync, kernel settings, versions, disks, ports, watchdog, and the environment variables that break Patroni. Run it on each node before you start.</p></div>
+      <div class="card"><span class="tag">ha-check</span><h3>Health in one command</h3><p>etcd quorum, leader, replication lag, routing, WAL archiving, backup age and replication slots. Nagios/Zabbix exit codes and JSON output for Prometheus. <a href="https://github.com/twinhullhq/ha-check">Free and open source on GitHub</a>: try it on your cluster today.</p></div>
+      <div class="card"><span class="tag">failover-drill</span><h3>Proof, with numbers</h3><p>Switchover, clean stop or crash, with measured downtime, lost transactions and rejoin time. The report is ready for an audit.</p></div>
+      <div class="card"><span class="tag">backup</span><h3>Backups that survive failover</h3><p>The same cron job on every node, and only the current primary backs up. The point-in-time restore procedure is tested step by step.</p></div>
+      <div class="card"><span class="tag">lab.sh</span><h3>A 3-node cluster on one VM</h3><p>Rehearse failovers, restores and upgrades before production. It uses the same templates and scripts, and runs in under a minute.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="alt" aria-labelledby="guide-h">
+  <div class="wrap grid g2">
+    <div>
+      <span class="eyebrow">The guide</span>
+      <h2 id="guide-h">Written for the day something goes wrong</h2>
+      <p>Every chapter leads with the decision or the command, then explains why. The disaster-recovery runbook is written for an on-call engineer with no time to read.</p>
+      <a class="btn btn-ghost" href="sample.html">Read chapter 10 excerpt free</a>
+    </div>
+    <ol class="checklist" style="columns: 1">
+      <li>Architecture and every design decision explained</li>
+      <li>Server preparation, sizing, ports, packages</li>
+      <li>Installation, step by step, with expected output</li>
+      <li>Operations: switchover, parameters, upgrades, adding nodes</li>
+      <li>Backups and a tested point-in-time restore</li>
+      <li>Monitoring: Nagios, Zabbix, Prometheus</li>
+      <li>Failure drills and how to read the report</li>
+      <li>Disaster-recovery runbook: 8 scenarios</li>
+      <li>Security: etcd mutual TLS, REST API, secrets</li>
+      <li>Troubleshooting: real failures and their fixes</li>
+    </ol>
+  </div>
+</section>
+
+<section aria-labelledby="traps-h">
+  <div class="wrap">
+    <span class="eyebrow">Found while testing</span>
+    <h2 id="traps-h">Four production traps the tutorials miss</h2>
+    <p class="lead">Each one broke our test cluster before release. Each one is fixed in the kit, and explained in free articles.</p>
+    <div class="grid g2" style="margin-top:24px">
+      <div class="card"><h3><a href="articles/patroni-pg-rewind-password-authentication-failed.html">A password variable that breaks pg_rewind</a></h3><p><code>PGPASSWORD</code> in Patroni's environment overrides its <code>.pgpass</code>. Planned switchovers still work, but after a crash the old leader can't rejoin the cluster.</p></div>
+      <div class="card"><h3><a href="articles/patroni-etcd-attributeerror-int-object-has-no-attribute-get.html">Ubuntu's etcd doesn't work with Patroni</a></h3><p>Ubuntu 24.04 ships etcd 3.4. Patroni loops forever on a cryptic <code>AttributeError</code> and never starts.</p></div>
+      <div class="card"><h3>Patroni reads your deploy script's variables</h3><p>Any <code>PATRONI_*</code> environment variable overrides <code>patroni.yml</code>, so a harmless-looking variable name in a deploy script changes the cluster's behaviour.</p></div>
+      <div class="card"><h3>Archiving fails from the first second</h3><p>WAL archiving starts at bootstrap, before any backup stanza exists. Unless you know the order, <code>pg_wal</code> quietly fills up.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="alt" aria-labelledby="fit-h">
+  <div class="wrap grid g2">
+    <div>
+      <h2 id="fit-h">Built for</h2>
+      <ul class="checklist">
+        <li>DBAs and DevOps engineers running PostgreSQL on their own VMs or servers</li>
+        <li>Teams in regulated industries who need tested continuity: banking, payments, healthcare, government</li>
+        <li>Anyone replacing a single PostgreSQL server with a 3-node cluster</li>
+        <li>Teams whose Patroni cluster exists but has never been failure-tested</li>
+      </ul>
+    </div>
+    <div>
+      <h2>Not for</h2>
+      <ul>
+        <li>Kubernetes. Use an operator such as CloudNativePG, Zalando or Crunchy.</li>
+        <li>Managed databases (RDS, Cloud SQL, Azure). The provider handles failover.</li>
+        <li>Complete beginners. You should be comfortable with Linux and basic PostgreSQL administration.</li>
+      </ul>
+      <p class="muted">We'd rather tell you now than refund you later.</p>
+    </div>
+  </div>
+</section>
+
+<section id="pricing" aria-labelledby="pricing-h">
+  <div class="wrap">
+    <span class="eyebrow">Pricing</span>
+    <h2 id="pricing-h">One payment. Yours to keep.</h2>
+    <p class="lead">Less than one hour of a consultant's time. The same material as a 3-day training course, plus the tools.</p>
+    <div class="grid g2 pricing" style="margin-top:28px">
+      <div class="card price-card featured">
+        <span class="tag">Launch price — first 100 buyers</span>
+        <h3>Solo</h3>
+        <div class="price">$89<s>$129</s></div>
+        <p class="muted small">One engineer · one-time payment</p>
+        <ul>
+          <li>The complete kit: tools, templates, lab</li>
+          <li>The 10-chapter guide and DR runbook</li>
+          <li>Use it on every cluster your organisation runs</li>
+          <li>12 months of updates</li>
+        </ul>
+        <a class="btn btn-primary btn-block buy" data-plan="solo" href="mailto:support@twinhullhq.com?subject=Twinhull%20Solo%20-%20notify%20me%20at%20launch">Notify me at launch</a>
+      </div>
+      <div class="card price-card">
+        <span class="tag">For teams</span>
+        <h3>Team</h3>
+        <div class="price">$349</div>
+        <p class="muted small">Up to 10 engineers at one company · one-time payment</p>
+        <ul>
+          <li>Everything in Solo, for the whole team</li>
+          <li>Priority email support for 12 months</li>
+          <li>Invoice with your company details</li>
+          <li>12 months of updates</li>
+        </ul>
+        <a class="btn btn-ghost btn-block buy" data-plan="team" href="mailto:support@twinhullhq.com?subject=Twinhull%20Team%20-%20notify%20me%20at%20launch">Notify me at launch</a>
+      </div>
+    </div>
+    <p class="small muted" style="margin-top:16px"><strong>30-day refund, no questions asked.</strong> Prices in USD; sales tax or VAT is added at checkout where it applies. Payments are handled by our reseller, Paddle.com, which issues your invoice.</p>
+  </div>
+</section>
+
+<section class="alt" aria-labelledby="faq-h">
+  <div class="narrow">
+    <h2 id="faq-h">Questions</h2>
+    <details><summary>Which versions does it support?</summary><p>Patroni 4.x, etcd 3.5 and newer, HAProxy 2.x, pgBackRest 2.x, and PostgreSQL 14 to 18 on Ubuntu 22.04/24.04, Debian 12 and RHEL-family 8/9. Every release note lists exactly what was re-tested. v1.0 was tested on PostgreSQL 16 and Ubuntu 24.04.</p></details>
+    <details><summary>Can I see the quality before buying?</summary><p>Yes. Read the <a href="sample.html">free chapter excerpt</a> and the <a href="articles/">articles</a>. And there's the 30-day refund.</p></details>
+    <details><summary>Can I use it on production clusters at work?</summary><p>Yes. The license covers every cluster your organisation owns or operates. Solo covers one engineer; Team covers up to ten. You may modify the files for internal use. You may not redistribute or resell them.</p></details>
+    <details><summary>Does it work in the cloud?</summary><p>On virtual machines, yes (AWS EC2, Azure VMs, GCP, Hetzner, on-premises VMware and others). Cloud networks often block VRRP; the guide covers the alternatives to a floating IP, such as a cloud load balancer or multi-host connection strings.</p></details>
+    <details><summary>What if a script damages my cluster?</summary><p>The scripts refuse unsafe actions by default: crash drills in production need an explicit <code>--yes</code>. Rehearse everything in the lab first. The kit comes without warranty, as described in the license.</p></details>
+    <details><summary>How do I get updates?</summary><p>By email, with a new download link, for 12 months. After that you keep your version forever.</p></details>
+    <details><summary>Is Twinhull affiliated with PostgreSQL or Patroni?</summary><p>No. Twinhull is an independent publisher. PostgreSQL, Patroni, etcd, HAProxy and pgBackRest are open-source projects with their own licenses; the kit configures them and does not include them.</p></details>
+  </div>
+</section>
+
+</main>
+<footer class="site-footer">
+  <div class="wrap">
+    <div>© 2026 Twinhull · Tested high availability for PostgreSQL<br>
+    <span class="small">PostgreSQL is a registered trademark of the PostgreSQL Community Association. Twinhull is not affiliated with or endorsed by it.</span></div>
+    <nav aria-label="Legal">
+      <a href="legal/terms.html">Terms</a>
+      <a href="legal/privacy.html">Privacy</a>
+      <a href="legal/refund.html">Refunds</a>
+      <a href="mailto:support@twinhullhq.com">support@twinhullhq.com</a>
+    </nav>
+  </div>
+</footer>
+</body>
+</html>
