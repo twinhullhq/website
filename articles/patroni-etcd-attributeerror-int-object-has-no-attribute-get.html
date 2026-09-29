@@ -17,6 +17,8 @@
 <link rel="stylesheet" href="../assets/style.css">
 
 <script type="application/ld+json">{"@context": "https://schema.org", "@type": "TechArticle", "headline": "Patroni “Failed to get list of machines… 'int' object has no attribute 'get'” with etcd on Ubuntu 24.04", "description": "Patroni loops on 'Failed to get list of machines from http://…/v3: AttributeError' and 'waiting on etcd'. The cause is the etcd 3.4 package in Ubuntu 24.04; here is how to confirm it and install a working etcd 3.6.", "datePublished": "2026-09-27", "dateModified": "2026-09-27", "author": {"@type": "Organization", "name": "Twinhull", "url": "https://twinhullhq.com"}, "publisher": {"@type": "Organization", "name": "Twinhull", "url": "https://twinhullhq.com"}, "mainEntityOfPage": "https://twinhullhq.com/articles/patroni-etcd-attributeerror-int-object-has-no-attribute-get.html"}</script>
+<script src="../assets/signup.js" defer></script>
+<script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token": "895a105ff7c147bf91e21e153cd2d2c0"}'></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -89,6 +91,19 @@ etcd --version | head -1                             <span class="ok"># etcd Ver
       <p>The kit's <code>preflight</code> check fails on etcd versions older than 3.5 before you install anything, and the guide installs the official 3.6 release with a hardened systemd unit and optional mutual TLS.</p>
       <a class="btn btn-primary" href="../index.html">See the kit</a>
     </div>
+    <div class="signup" id="field-notes">
+  <div>
+    <h3>Twinhull field notes</h3>
+    <p class="muted">One tested Patroni fix or measurement a month, like the articles here. No spam; unsubscribe in one click.</p>
+  </div>
+  <form class="signup-form" action="https://twinhull-delivery.young-snowflake-058a.workers.dev/subscribe" method="post">
+    <label class="sr-only" for="su-email">Email address</label>
+    <input id="su-email" type="email" name="email" required autocomplete="email" maxlength="254" placeholder="you@company.com">
+    <div class="hp" aria-hidden="true"><label>Leave this empty <input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>
+    <button class="btn btn-primary" type="submit">Subscribe</button>
+    <p class="signup-msg small" role="status" aria-live="polite"></p>
+  </form>
+</div>
   </div>
 </article>
 

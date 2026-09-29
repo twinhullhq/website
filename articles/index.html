@@ -17,6 +17,8 @@
 <link rel="stylesheet" href="../assets/style.css">
 
 
+<script src="../assets/signup.js" defer></script>
+<script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token": "895a105ff7c147bf91e21e153cd2d2c0"}'></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -44,6 +46,23 @@
     <div class="card"><span class="tag">Performance</span><h3><a href="how-long-does-patroni-failover-take.html">How long does a Patroni failover take? We measured it</a></h3><p>Switchover, clean stop and crash timings, what ttl and loop_wait really do, and what tuning buys you.</p></div>
     <div class="card"><span class="tag">Troubleshooting</span><h3><a href="patroni-pg-rewind-password-authentication-failed.html">pg_rewind “password authentication failed” and the PGPASSWORD trap</a></h3><p>Why a crashed leader stays in <code>start failed</code>, and a 10-second check for the cause.</p></div>
     <div class="card"><span class="tag">Installation</span><h3><a href="patroni-etcd-attributeerror-int-object-has-no-attribute-get.html">“'int' object has no attribute 'get'” with etcd on Ubuntu 24.04</a></h3><p>Patroni never starts on Ubuntu's etcd package. How to confirm it and install a working etcd 3.6.</p></div>
+  </div>
+</section>
+<section style="padding-top:0">
+  <div class="narrow">
+    <div class="signup" id="field-notes">
+  <div>
+    <h3>Twinhull field notes</h3>
+    <p class="muted">One tested Patroni fix or measurement a month, like the articles here. No spam; unsubscribe in one click.</p>
+  </div>
+  <form class="signup-form" action="https://twinhull-delivery.young-snowflake-058a.workers.dev/subscribe" method="post">
+    <label class="sr-only" for="su-email">Email address</label>
+    <input id="su-email" type="email" name="email" required autocomplete="email" maxlength="254" placeholder="you@company.com">
+    <div class="hp" aria-hidden="true"><label>Leave this empty <input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>
+    <button class="btn btn-primary" type="submit">Subscribe</button>
+    <p class="signup-msg small" role="status" aria-live="polite"></p>
+  </form>
+</div>
   </div>
 </section>
 
