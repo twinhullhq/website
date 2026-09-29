@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Sample failover drill report (hard crash) · Twinhull</title>
+<meta name="description" content="A complete, unedited failover-drill report from the Twinhull lab: a Patroni leader killed with SIGKILL, 24.2 s of write downtime, 0 committed transactions lost.">
+<link rel="canonical" href="https://twinhullhq.com/sample-report.html">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Sample failover drill report (hard crash)">
+<meta property="og:description" content="A complete, unedited failover-drill report from the Twinhull lab: a Patroni leader killed with SIGKILL, 24.2 s of write downtime, 0 committed transactions lost.">
+<meta property="og:url" content="https://twinhullhq.com/sample-report.html">
+<meta property="og:site_name" content="Twinhull">
+<meta name="twitter:card" content="summary">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="assets/style.css">
+
+
+<script src="assets/signup.js" defer></script>
+<script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token": "895a105ff7c147bf91e21e153cd2d2c0"}'></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="index.html"><img src="assets/logo.svg" alt="" width="30" height="30">Twinhull</a>
+    <nav class="nav" aria-label="Main">
+<a href="index.html" aria-current="page">Kit</a>
+<a href="sample.html">Free chapter</a>
+<a href="articles/">Articles</a>
+<a href="index.html#pricing">Pricing</a>
+    </nav>
+  </div>
+</header>
+<main id="main">
+<article class="article">
+  <div class="narrow">
+    <span class="eyebrow">Real output, not a mock-up</span>
+    <h1>Failover drill report: hard crash</h1>
+    <p class="lead">This is what <code>failover-drill --mode crash</code> writes after killing the leader's Patroni and PostgreSQL with <code>SIGKILL</code> while an application is writing. Nothing below is edited: it's the report from our 3-node lab (three PostgreSQL nodes on one VM, so the hosts are all 127.0.0.1).</p>
+    <p class="muted">Every committed row is checked afterwards. On your cluster the numbers will differ; measuring them is the point.</p>
+    <h2>Failover drill report: PASS</h2>
+<div class="table-wrap"><table>
+<tbody>
+<tr class="odd">
+<td>Cluster</td>
+<td><code>lab</code></td>
+</tr>
+<tr class="even">
+<td>Run</td>
+<td><code>drill-20260926-165412</code> (2026-09-26T16:54:51+03:00)</td>
+</tr>
+<tr class="odd">
+<td>Mode</td>
+<td><strong>crash</strong></td>
+</tr>
+<tr class="even">
+<td>Replication</td>
+<td>asynchronous</td>
+</tr>
+<tr class="odd">
+<td>Old leader → new leader</td>
+<td><code>pg1</code> → <code>pg3</code></td>
+</tr>
+<tr class="even">
+<td>Timeline</td>
+<td>1 → 2</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="results">Results</h3>
+<div class="table-wrap"><table>
+<thead>
+<tr class="header">
+<th>Metric</th>
+<th>Value</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td>New leader routable via HAProxy after</td>
+<td><strong>24.4 s</strong></td>
+</tr>
+<tr class="even">
+<td>Write downtime (first failed → first successful write)</td>
+<td><strong>24.2 s</strong></td>
+</tr>
+<tr class="odd">
+<td>Longest gap between successful commits</td>
+<td>24.4 s</td>
+</tr>
+<tr class="even">
+<td>Writes attempted / committed / failed</td>
+<td>129 / 53 / 76</td>
+</tr>
+<tr class="odd">
+<td>Committed transactions lost</td>
+<td><strong>0</strong></td>
+</tr>
+<tr class="even">
+<td>Old leader back as streaming replica after</td>
+<td>33.8 s</td>
+</tr>
+</tbody>
+</table></div>
+<h3 id="notes">Notes</h3>
+<ul>
+<li>No loss this time, but async replication does not guarantee it.</li>
+</ul>
+<h3 id="cluster-after-the-drill">Cluster after the drill</h3>
+<pre class="terminal"><code>+ Cluster: lab (7689841837669857905) -----------+----+-------------+-----+------------+-----+
+| Member | Host           | Role    | State     | TL | Receive LSN | Lag | Replay LSN | Lag |
++--------+----------------+---------+-----------+----+-------------+-----+------------+-----+
+| pg1    | 127.0.0.1:5432 | Replica | streaming |  2 |   0/603C8B8 |   0 |  0/603C8B8 |   0 |
+| pg2    | 127.0.0.1:5433 | Replica | streaming |  2 |   0/603C598 |   0 |  0/603C598 |   0 |
+| pg3    | 127.0.0.1:5434 | Leader  | running   |  2 |             |     |            |     |
++--------+----------------+---------+-----------+----+-------------+-----+------------+-----+</code></pre>
+
+    <h2>How to read it</h2>
+    <ul>
+      <li><strong>Write downtime</strong> is what your users feel: from the first failed write to the first successful write on the new leader.</li>
+      <li><strong>Writes failed</strong> are attempts made while there was no leader; a retrying connection pool absorbs them. <strong>Committed transactions lost</strong> is the number that matters, and it's checked row by row.</li>
+      <li>About 24 seconds is expected with Patroni's default <code>ttl</code> of 30 seconds: a crashed leader can't release its lock, so it has to expire. <a href="articles/how-long-does-patroni-failover-take.html">Why, and what tuning buys you</a>.</li>
+      <li><strong>Old leader back as streaming replica</strong> shows that <code>pg_rewind</code> worked and the node rejoined by itself.</li>
+    </ul>
+    <div class="cta-box">
+      <h3>Run the same drill on your cluster</h3>
+      <p>The kit includes <code>failover-drill</code> (switchover, clean stop and crash modes), <code>ha-check</code>, the configuration templates, a 3-node lab and the 10-chapter guide.</p>
+      <a class="btn btn-primary" href="index.html#pricing">Get the kit — $89</a>
+    </div>
+    <div class="signup" id="field-notes">
+  <div>
+    <h3>Twinhull field notes</h3>
+    <p class="muted">One tested Patroni fix or measurement a month, like the articles here. No spam; unsubscribe in one click.</p>
+  </div>
+  <form class="signup-form" action="https://twinhull-delivery.young-snowflake-058a.workers.dev/subscribe" method="post">
+    <label class="sr-only" for="su-email">Email address</label>
+    <input id="su-email" type="email" name="email" required autocomplete="email" maxlength="254" placeholder="you@company.com">
+    <div class="hp" aria-hidden="true"><label>Leave this empty <input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>
+    <button class="btn btn-primary" type="submit">Subscribe</button>
+    <p class="signup-msg small" role="status" aria-live="polite"></p>
+  </form>
+</div>
+  </div>
+</article>
+
+</main>
+<footer class="site-footer">
+  <div class="wrap">
+    <div>© 2026 Twinhull · Tested high availability for PostgreSQL<br>
+    <span class="small">PostgreSQL is a registered trademark of the PostgreSQL Community Association. Twinhull is not affiliated with or endorsed by it.</span></div>
+    <nav aria-label="Legal">
+      <a href="legal/terms.html">Terms</a>
+      <a href="legal/privacy.html">Privacy</a>
+      <a href="legal/refund.html">Refunds</a>
+      <a href="mailto:support@twinhullhq.com">support@twinhullhq.com</a>
+    </nav>
+  </div>
+</footer>
+</body>
+</html>

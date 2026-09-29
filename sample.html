@@ -17,6 +17,8 @@
 <link rel="stylesheet" href="assets/style.css">
 
 
+<script src="assets/signup.js" defer></script>
+<script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token": "895a105ff7c147bf91e21e153cd2d2c0"}'></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -59,6 +61,19 @@
       <p>The full kit adds the architecture decisions, a step-by-step install, a tested restore procedure, a DR runbook, and the tools that found these bugs: <code>preflight</code>, <code>ha-check</code>, <code>failover-drill</code> and a 3-node lab.</p>
       <a class="btn btn-primary" href="index.html#pricing">Get the kit — $89</a>
     </div>
+    <div class="signup" id="field-notes">
+  <div>
+    <h3>Twinhull field notes</h3>
+    <p class="muted">One tested Patroni fix or measurement a month, like the articles here. No spam; unsubscribe in one click.</p>
+  </div>
+  <form class="signup-form" action="https://twinhull-delivery.young-snowflake-058a.workers.dev/subscribe" method="post">
+    <label class="sr-only" for="su-email">Email address</label>
+    <input id="su-email" type="email" name="email" required autocomplete="email" maxlength="254" placeholder="you@company.com">
+    <div class="hp" aria-hidden="true"><label>Leave this empty <input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>
+    <button class="btn btn-primary" type="submit">Subscribe</button>
+    <p class="signup-msg small" role="status" aria-live="polite"></p>
+  </form>
+</div>
   </div>
 </article>
 

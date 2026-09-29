@@ -18,6 +18,8 @@
 
 <script type="application/ld+json">{"@context": "https://schema.org", "@type": "Product", "name": "Twinhull HA Kit for PostgreSQL", "description": "A production Patroni + etcd + HAProxy + pgBackRest kit for PostgreSQL, tested on a real cluster: health checks, failover drills that measure downtime and data loss, runbooks and a 3-node lab.", "brand": {"@type": "Brand", "name": "Twinhull"}, "offers": [{"@type": "Offer", "name": "Solo", "price": "89.00", "priceCurrency": "USD", "url": "https://twinhullhq.com/#pricing"}, {"@type": "Offer", "name": "Team", "price": "349.00", "priceCurrency": "USD", "url": "https://twinhullhq.com/#pricing"}]}</script>
 <script src="assets/checkout.js" defer></script>
+<script src="assets/signup.js" defer></script>
+<script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token": "895a105ff7c147bf91e21e153cd2d2c0"}'></script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to content</a>
@@ -53,6 +55,7 @@
       <h2 id="drill-h">Pull the plug on your leader. Get a report.</h2>
       <p><code>failover-drill</code> writes to your cluster every 200&nbsp;ms, takes the leader away (planned switchover, clean stop, or a hard crash), then checks every committed row and times every second of downtime.</p>
       <p>You get a report you can hand to your manager or your auditor: how long writes stopped, how many transactions were lost, and whether the old leader rejoined by itself.</p>
+      <p><a href="sample-report.html">See a complete drill report from our lab →</a></p>
     </div>
 <pre class="terminal" aria-label="Example output of failover-drill"><span class="c">$ sudo bin/failover-drill --mode crash</span>
 ▸ preflight: ha-check            <span class="ok">Overall: OK</span>
@@ -215,6 +218,19 @@ Verdict: <span class="ok">PASS</span>   Report: reports/drill-…-crash.md</pre>
       </div>
     </div>
     <p class="small muted" style="margin-top:16px"><strong>30-day refund, no questions asked.</strong> Prices in USD; sales tax or VAT is added at checkout where it applies. Payments are handled by our reseller, Paddle.com, which issues your invoice.</p>
+    <div class="signup" id="field-notes">
+  <div>
+    <h3>Twinhull field notes</h3>
+    <p class="muted">One tested Patroni fix or measurement a month, like the articles here. No spam; unsubscribe in one click.</p>
+  </div>
+  <form class="signup-form" action="https://twinhull-delivery.young-snowflake-058a.workers.dev/subscribe" method="post">
+    <label class="sr-only" for="su-email">Email address</label>
+    <input id="su-email" type="email" name="email" required autocomplete="email" maxlength="254" placeholder="you@company.com">
+    <div class="hp" aria-hidden="true"><label>Leave this empty <input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>
+    <button class="btn btn-primary" type="submit">Subscribe</button>
+    <p class="signup-msg small" role="status" aria-live="polite"></p>
+  </form>
+</div>
   </div>
 </section>
 
