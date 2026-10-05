@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>Point-in-time restore of a Patroni cluster with pgBackRest (tested) · Twinhull</title>
+<meta name="description" content="Restore a Patroni cluster to just before a bad DROP with pgBackRest: the tested steps, why Patroni must be stopped first, and the mistakes to avoid.">
+<link rel="canonical" href="https://twinhullhq.com/articles/point-in-time-restore-patroni-pgbackrest.html">
+<meta property="og:type" content="article">
+<meta property="og:title" content="Point-in-time restore of a Patroni cluster with pgBackRest (tested)">
+<meta property="og:description" content="Restore a Patroni cluster to just before a bad DROP with pgBackRest: the tested steps, why Patroni must be stopped first, and the mistakes to avoid.">
+<meta property="og:url" content="https://twinhullhq.com/articles/point-in-time-restore-patroni-pgbackrest.html">
+<meta property="og:site_name" content="Twinhull">
+<meta name="twitter:card" content="summary">
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../assets/style.css">
+
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "TechArticle", "headline": "Point-in-time restore of a Patroni cluster with pgBackRest (tested)", "description": "Restore a Patroni cluster to just before a bad DROP with pgBackRest: the tested steps, why Patroni must be stopped first, and the mistakes to avoid.", "datePublished": "2026-10-05", "dateModified": "2026-10-05", "author": {"@type": "Organization", "name": "Twinhull", "url": "https://twinhullhq.com"}, "publisher": {"@type": "Organization", "name": "Twinhull", "url": "https://twinhullhq.com"}, "mainEntityOfPage": "https://twinhullhq.com/articles/point-in-time-restore-patroni-pgbackrest.html"}</script>
+<script src="../assets/signup.js" defer></script>
+<script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token": "895a105ff7c147bf91e21e153cd2d2c0"}'></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="../index.html"><img src="../assets/logo.svg" alt="" width="30" height="30">Twinhull</a>
+    <nav class="nav" aria-label="Main">
+<a href="../index.html">Kit</a>
+<a href="../sample.html">Free chapter</a>
+<a href="../articles/" aria-current="page">Articles</a>
+<a href="../index.html#pricing">Pricing</a>
+    </nav>
+  </div>
+</header>
+<main id="main">
+<article class="article">
+  <div class="narrow">
+    <p class="crumbs"><a href="../articles/">Articles</a> › Backups</p>
+    <h1>Point-in-time restore of a Patroni cluster with pgBackRest (tested)</h1>
+    <p class="meta">Published 5 October 2026 · 6 min read · Tested on a 3-node Patroni cluster · Patroni 4.1.5, etcd 3.6.15, PostgreSQL 16.15, pgBackRest 2.50</p>
+
+<p class="lead">Someone ran <code>DROP TABLE</code> on production. You have pgBackRest backups and a WAL archive, so the data can come back. The hard part is not pgBackRest. It's Patroni, which will undo your restore if you do it underneath a running cluster. Here is the procedure we tested: 1,000 rows written, the table dropped, the cluster restored to the moment before the drop, all 1,000 rows back, replicas rebuilt, and <code>ha-check</code> reporting a healthy cluster.</p>
+<h2>First: do you need a restore at all?</h2>
+<div class="table-wrap">
+<table>
+<thead><tr><th>What happened</th><th>What to do</th></tr></thead>
+<tbody>
+<tr><td>One node's disk died</td><td>Nothing from backup. <code>patronictl reinit</code> clones it from the leader.</td></tr>
+<tr><td>Every node lost, repository intact</td><td>Full restore to the latest point: the procedure below without <code>--type=time</code>.</td></tr>
+<tr><td>Accidental <code>DROP</code>/<code>DELETE</code>, bad deploy</td><td>Point-in-time restore to just before it: the procedure below.</td></tr>
+<tr><td>One table needed back, the cluster stays up</td><td>Restore to a separate server at that point in time, then copy the table back with <code>pg_dump -t</code>.</td></tr>
+</tbody>
+</table>
+</div>
+<p>A point-in-time restore replaces the cluster's current data. Everything written after the target time is gone, including legitimate writes made after the mistake. That is a business decision, not a DBA one: get it in writing before you start. If one table was damaged and the rest of the database is still taking writes, the last row of the table is usually the better answer.</p>
+<h2>Why you can't restore into the running cluster</h2>
+<p>The naive approach is to stop PostgreSQL on one node, run <code>pgbackrest restore</code>, and start it again. Patroni is still running, and etcd still holds its view of the cluster: who the leader is, and which timeline it's on.</p>
+<p>Restore on a replica and Patroni treats the node as a replica that has drifted. It will try to make it follow the current leader, the one with the dropped table, or re-clone it from that leader and throw your restore away. Restore on the leader and the other nodes still carry the damaged history, and you end up with nodes competing for the leader key.</p>
+<p>So the order matters. Stop Patroni everywhere, clear the cluster's state in etcd, restore one node, let it take the leader lock as if it were a new cluster, then rebuild the others from it.</p>
+<h2>The procedure</h2>
+<p><strong>1. Find the target time.</strong> Take it from the application log or the PostgreSQL log, just before the bad statement. Always include a time zone:</p>
+<pre>TARGET="2026-09-26 14:06:23+00"</pre>
+<p><strong>2. Stop Patroni on all nodes, replicas first, leader last.</strong> On pg3, then pg2, then pg1:</p>
+<pre>systemctl stop patroni</pre>
+<p><strong>3. Clear the cluster state in etcd.</strong> From any node:</p>
+<pre>patronictl -c /etc/patroni/patroni.yml remove pg-ha</pre>
+<p>It asks you to type the cluster name, then <code>Yes I am aware</code>. This deletes the cluster's keys in etcd. It does not touch any data directory.</p>
+<p><strong>4. Restore on one node, keeping the old data.</strong> pgBackRest restores into an empty directory, so move the current one aside instead of deleting it. It's your way back.</p>
+<pre>mv /var/lib/postgresql/16/main /var/lib/postgresql/16/main.before-restore
+install -d -o postgres -g postgres -m 700 /var/lib/postgresql/16/main
+sudo -u postgres pgbackrest --stanza=pg-ha --type=time "--target=$TARGET" \
+    --target-action=promote restore</pre>
+<p><strong>5. Let PostgreSQL finish recovery, check, then stop it.</strong> Start PostgreSQL by hand, without Patroni:</p>
+<pre>sudo -u postgres /usr/lib/postgresql/16/bin/pg_ctl -D /var/lib/postgresql/16/main -w -t 3600 start
+sudo -u postgres psql -c "select pg_is_in_recovery()"</pre>
+<p><code>f</code> means recovery finished and the server promoted itself. <code>t</code> means it is still replaying WAL: wait and ask again. Then run a sanity query on the data you came for, such as <code>select count(*) from orders</code>, and stop the server:</p>
+<pre>sudo -u postgres /usr/lib/postgresql/16/bin/pg_ctl -D /var/lib/postgresql/16/main -w stop -m fast</pre>
+<p><strong>6. Start Patroni on the restored node.</strong></p>
+<pre>systemctl start patroni</pre>
+<p>It finds no cluster in etcd and a valid data directory, so it takes the leader lock. <code>patronictl list</code> shows pg1 as Leader, running, on a new timeline.</p>
+<p><strong>7. Rebuild the other nodes, pg2 then pg3.</strong> On each, move the old data directory aside, recreate the empty one with the same <code>install -d</code> command, and start Patroni. It clones a fresh copy from the new leader.</p>
+<p><strong>8. Take a full backup immediately, then check the cluster.</strong></p>
+<pre>sudo -u postgres pgbackrest --stanza=pg-ha --type=full backup</pre>
+<p>Then run <code>ha-check</code> against the cluster. Delete the <code>main.before-restore</code> directories once you're sure you won't need them.</p>
+<h2>Common mistakes</h2>
+<ul>
+<li><strong>No time zone in the target.</strong> A bare <code>2026-09-26 14:06:23</code> is read in the server's time zone setting, which may not be the zone of the log you took it from. An hour's difference either loses good data or brings the bad statement back.</li>
+<li><strong>Forgetting <code>--target-action=promote</code>.</strong> pgBackRest's default is <code>pause</code>: PostgreSQL stops at the target and waits, still in recovery and read-only. <code>pg_is_in_recovery()</code> keeps returning <code>t</code>, and it looks as if the restore hung.</li>
+<li><strong>Starting Patroni before recovery ends.</strong> Check for <code>f</code> in step 5 first. Step 6 relies on a finished, promoted data directory; a node still replaying WAL is not that.</li>
+<li><strong>Not taking a fresh full backup.</strong> The promotion starts a new timeline. Backups taken after the target time belong to the old branch, which the cluster no longer follows. Whether an older backup can later be replayed across the timeline switch depends on your archive and settings; check it in a lab rather than rely on it. A full backup straight away removes the question.</li>
+<li><strong>Deleting the old data directory early.</strong> Keep <code>main.before-restore</code> until the application owners have confirmed the data. It's the only copy of anything written after the target time.</li>
+</ul>
+<h2>Rehearse it before you need it</h2>
+<p>The first time you run this should not be during an incident, with someone waiting for the table to come back. Rehearse monthly in a lab cluster: write rows, drop the table, restore, count.</p>
+
+
+<div class="cta-box">
+<h3>The Twinhull kit includes this procedure and a lab to rehearse it</h3>
+<p>The Twinhull HA Kit for PostgreSQL documents this exact procedure (chapter 5) and ships a one-machine 3-node lab with pgBackRest, so you can rehearse the restore every month without working from notes.</p>
+<a class="btn btn-primary" href="../index.html">See the kit</a>
+</div>
+    <div class="signup" id="field-notes">
+  <div>
+    <h3>Twinhull field notes</h3>
+    <p class="muted">One tested Patroni fix or measurement a month, like the articles here. No spam; unsubscribe in one click.</p>
+  </div>
+  <form class="signup-form" action="https://twinhull-delivery.young-snowflake-058a.workers.dev/subscribe" method="post">
+    <label class="sr-only" for="su-email">Email address</label>
+    <input id="su-email" type="email" name="email" required autocomplete="email" maxlength="254" placeholder="you@company.com">
+    <div class="hp" aria-hidden="true"><label>Leave this empty <input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>
+    <button class="btn btn-primary" type="submit">Subscribe</button>
+    <p class="signup-msg small" role="status" aria-live="polite"></p>
+  </form>
+</div>
+  </div>
+</article>
+
+</main>
+<footer class="site-footer">
+  <div class="wrap">
+    <div>© 2026 Twinhull · Tested high availability for PostgreSQL<br>
+    <span class="small">PostgreSQL is a registered trademark of the PostgreSQL Community Association. Twinhull is not affiliated with or endorsed by it.</span></div>
+    <nav aria-label="Legal">
+      <a href="../legal/terms.html">Terms</a>
+      <a href="../legal/privacy.html">Privacy</a>
+      <a href="../legal/refund.html">Refunds</a>
+      <a href="mailto:support@twinhullhq.com">support@twinhullhq.com</a>
+    </nav>
+  </div>
+</footer>
+</body>
+</html>
