@@ -43,6 +43,7 @@
 </section>
 <section style="padding-top:8px">
   <div class="narrow grid">
+    <div class="card"><span class="tag">High availability</span><h3><a href="patroni-etcd-loses-quorum.html">What happens to Patroni when etcd loses quorum (measured)</a></h3><p>Lab-measured: the primary demotes itself and writes fail after 18 seconds, how recovery looks, and what failsafe_mode changes.</p></div>
     <div class="card"><span class="tag">High availability</span><h3><a href="patroni-haproxy-health-check-endpoints.html">Patroni and HAProxy: which health check to use (/primary, /replica, /leader and the rest)</a></h3><p>Which REST API endpoint HAProxy should check, a working configuration, and the mistakes that send writes to a replica.</p></div>
     <div class="card"><span class="tag">Backups</span><h3><a href="point-in-time-restore-patroni-pgbackrest.html">Point-in-time restore of a Patroni cluster with pgBackRest (tested)</a></h3><p>The tested steps to restore to just before a bad DROP, why Patroni must be stopped first, and the mistakes to avoid.</p></div>
     <div class="card"><span class="tag">Performance</span><h3><a href="how-long-does-patroni-failover-take.html">How long does a Patroni failover take? We measured it</a></h3><p>Switchover, clean stop and crash timings, what ttl and loop_wait really do, and what tuning buys you.</p></div>

@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>What happens to Patroni when etcd loses quorum (measured) · Twinhull</title>
+<meta name="description" content="Measured in a lab: when etcd loses quorum the Patroni primary demotes itself and writes fail after 18 seconds. What the logs show, how recovery looks, and what failsafe_mode changes.">
+<link rel="canonical" href="https://twinhullhq.com/articles/patroni-etcd-loses-quorum.html">
+<meta property="og:type" content="article">
+<meta property="og:title" content="What happens to Patroni when etcd loses quorum (measured)">
+<meta property="og:description" content="Measured in a lab: when etcd loses quorum the Patroni primary demotes itself and writes fail after 18 seconds. What the logs show, how recovery looks, and what failsafe_mode changes.">
+<meta property="og:url" content="https://twinhullhq.com/articles/patroni-etcd-loses-quorum.html">
+<meta property="og:site_name" content="Twinhull">
+<meta name="twitter:card" content="summary">
+<link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="../assets/style.css">
+
+<script type="application/ld+json">{"@context": "https://schema.org", "@type": "TechArticle", "headline": "What happens to Patroni when etcd loses quorum (measured)", "description": "Measured in a lab: when etcd loses quorum the Patroni primary demotes itself and writes fail after 18 seconds. What the logs show, how recovery looks, and what failsafe_mode changes.", "datePublished": "2026-10-08", "dateModified": "2026-10-08", "author": {"@type": "Organization", "name": "Twinhull", "url": "https://twinhullhq.com"}, "publisher": {"@type": "Organization", "name": "Twinhull", "url": "https://twinhullhq.com"}, "mainEntityOfPage": "https://twinhullhq.com/articles/patroni-etcd-loses-quorum.html"}</script>
+<script src="../assets/signup.js" defer></script>
+<script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon='{"token": "895a105ff7c147bf91e21e153cd2d2c0"}'></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to content</a>
+<header class="site-header">
+  <div class="wrap">
+    <a class="brand" href="../index.html"><img src="../assets/logo.svg" alt="" width="30" height="30">Twinhull</a>
+    <nav class="nav" aria-label="Main">
+<a href="../index.html">Kit</a>
+<a href="../sample.html">Free chapter</a>
+<a href="../articles/" aria-current="page">Articles</a>
+<a href="../index.html#pricing">Pricing</a>
+    </nav>
+  </div>
+</header>
+<main id="main">
+<article class="article">
+  <div class="narrow">
+    <p class="crumbs"><a href="../articles/">Articles</a> › High availability</p>
+    <h1>What happens to Patroni when etcd loses quorum (measured)</h1>
+    <p class="meta">Published 8 October 2026 · 4 min read · Measured in a lab: Patroni 4.1.5, etcd 3.6.5, PostgreSQL 16, default timings</p>
+
+<p class="lead">Short answer: with default settings, when etcd loses quorum the Patroni primary demotes itself and your application can no longer write, even though PostgreSQL is healthy and no node has failed. Here is what we saw, line by line, and the one setting that changes it.</p>
+<h2>The setup</h2>
+<p>Three etcd members (ports 2379, 2479, 2579) and three Patroni nodes (pg1, pg2, pg3) with pg1 as leader, asynchronous replication, all on one lab machine. A client inserted one row per second into pg1 and logged each result. We stopped etcd members with a plain kill. These are lab measurements from one run each, not production figures.</p>
+<h2>Lose one etcd member: nothing happens</h2>
+<p>We stopped one of three members. Quorum needs two, so etcd stayed up. Patroni kept logging <code>no action. I am (pg1), the leader with the lock</code>, the replicas kept streaming, and every insert succeeded. This is why a cluster can sit one failure away from trouble without anyone noticing: nothing in Patroni's output changes.</p>
+<h2>Lose a second member: the primary stops accepting writes</h2>
+<p>At 20:05:36 we stopped a second member, so one of three remained and quorum was gone. The last successful insert was at 20:05:54, 18 seconds later. Then Patroni logged:</p>
+<pre>ERROR: Error communicating with DCS
+INFO: demoting self because DCS is not accessible and I was a leader
+INFO: demoted self because DCS is not accessible and I was a leader</pre>
+<p>PostgreSQL restarted read-only on pg1, and from 20:05:55 every write failed with:</p>
+<pre>ERROR:  cannot execute INSERT in a read-only transaction</pre>
+<p>The two replicas did not take over. Electing a leader needs a write to etcd, and etcd could not accept one. So during the outage the cluster had no primary at all: three healthy PostgreSQL servers, all read-only. <code>patronictl list</code> failed with <code>Etcd is not responding properly</code>.</p>
+<h2>Restore quorum: writes come back</h2>
+<p>We started the stopped member at 20:06:54. Patroni logged <code>received promote request</code>, and the first insert succeeded at 20:06:55, one second later. The timeline moved from 1 to 2 because the node had been demoted and promoted again. Both replicas were streaming again with zero lag. In this run the outage lasted about 60 seconds, almost all of it the time we took to bring etcd back.</p>
+<h2>The setting that changes it: failsafe_mode</h2>
+<p>Patroni has a <code>failsafe_mode</code> option, off by default. We turned it on with:</p>
+<pre>patronictl edit-config -s failsafe_mode=true --force</pre>
+<p>and repeated the test, taking etcd down to no quorum at all. This time the primary stayed primary. For the 70 seconds we watched, every insert succeeded. The log shows how:</p>
+<pre>ERROR: Error communicating with DCS
+INFO: Got response from pg3 http://127.0.0.1:8083/failsafe: Accepted
+INFO: Got response from pg2 http://127.0.0.1:8082/failsafe: Accepted
+INFO: continue to run as a leader because failsafe mode is enabled and all members are accessible</pre>
+<p>With failsafe mode the leader asks the other members over the Patroni REST API whether it may keep running. While all of them answer, it does. The message tells you the condition: "all members are accessible". We did not test what happens when a member is unreachable during the outage, or when the primary crashes while etcd is down. In both cases, expect no automatic failover until etcd is back, because there is nowhere to record a new leader.</p>
+<h2>What to do about it</h2>
+<ul>
+<li>Keep etcd healthy. Three members survive one failure; the check that matters is how many more you can lose. <code>ha-check</code> checks etcd health and quorum, so a cluster that is one failure from losing quorum shows up before it happens.</li>
+<li>Decide deliberately about <code>failsafe_mode</code>. Off: a quorum loss costs you writes but never risks two primaries. On: writes continue, at the price of relying on the REST API between nodes. Test it in a lab before enabling it on a production cluster.</li>
+<li>Alert on etcd member health, not only on Patroni. In our run Patroni said nothing unusual after the first member went down.</li>
+<li>Rehearse it: stop two etcd members in a lab and watch what your application does.</li>
+</ul>
+
+
+<div class="cta-box">
+<h3>The Twinhull kit includes a lab to rehearse this</h3>
+<p>The Twinhull HA Kit for PostgreSQL ships a one-machine 3-node lab and drill scripts, so you can break etcd on purpose and see the result before it happens in production.</p>
+<a class="btn btn-primary" href="../index.html">See the kit</a>
+</div>
+    <div class="signup" id="field-notes">
+  <div>
+    <h3>Twinhull field notes</h3>
+    <p class="muted">One tested Patroni fix or measurement a month, like the articles here. No spam; unsubscribe in one click.</p>
+  </div>
+  <form class="signup-form" action="https://twinhull-delivery.young-snowflake-058a.workers.dev/subscribe" method="post">
+    <label class="sr-only" for="su-email">Email address</label>
+    <input id="su-email" type="email" name="email" required autocomplete="email" maxlength="254" placeholder="you@company.com">
+    <div class="hp" aria-hidden="true"><label>Leave this empty <input type="text" name="website" tabindex="-1" autocomplete="off"></label></div>
+    <button class="btn btn-primary" type="submit">Subscribe</button>
+    <p class="signup-msg small" role="status" aria-live="polite"></p>
+  </form>
+</div>
+  </div>
+</article>
+
+</main>
+<footer class="site-footer">
+  <div class="wrap">
+    <div>© 2026 Twinhull · Tested high availability for PostgreSQL<br>
+    <span class="small">PostgreSQL is a registered trademark of the PostgreSQL Community Association. Twinhull is not affiliated with or endorsed by it.</span></div>
+    <nav aria-label="Legal">
+      <a href="../legal/terms.html">Terms</a>
+      <a href="../legal/privacy.html">Privacy</a>
+      <a href="../legal/refund.html">Refunds</a>
+      <a href="mailto:support@twinhullhq.com">support@twinhullhq.com</a>
+    </nav>
+  </div>
+</footer>
+</body>
+</html>
