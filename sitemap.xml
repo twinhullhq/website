@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url><loc>https://twinhullhq.com/articles/how-long-does-patroni-failover-take.html</loc><lastmod>2026-09-27</lastmod></url>
-  <url><loc>https://twinhullhq.com/articles/</loc><lastmod>2026-10-06</lastmod></url>
+  <url><loc>https://twinhullhq.com/articles/</loc><lastmod>2026-10-08</lastmod></url>
   <url><loc>https://twinhullhq.com/articles/patroni-etcd-attributeerror-int-object-has-no-attribute-get.html</loc><lastmod>2026-09-27</lastmod></url>
+  <url><loc>https://twinhullhq.com/articles/patroni-etcd-loses-quorum.html</loc><lastmod>2026-10-08</lastmod></url>
   <url><loc>https://twinhullhq.com/articles/patroni-haproxy-health-check-endpoints.html</loc><lastmod>2026-10-06</lastmod></url>
   <url><loc>https://twinhullhq.com/articles/patroni-pg-rewind-password-authentication-failed.html</loc><lastmod>2026-09-27</lastmod></url>
   <url><loc>https://twinhullhq.com/articles/point-in-time-restore-patroni-pgbackrest.html</loc><lastmod>2026-10-05</lastmod></url>
